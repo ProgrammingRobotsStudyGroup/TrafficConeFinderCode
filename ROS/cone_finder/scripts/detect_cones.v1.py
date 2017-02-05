@@ -9,26 +9,17 @@ import glob
 
 # Needed for publishing the messages
 import rospy
-import message_filters
-from sensor_msgs.msg import Image, CompressedImage, CameraInfo
 from geometry_msgs.msg import Pose2D
 from cone_finder.msg import location_msgs as location_data
-from cv_bridge import CvBridge, CvBridgeError
-import threading
 
 class Args(object):
-    use_ros_topic = False
     debug = False
     fromMain = False
     image_dir = ''
     video_file = ''
 
 args = Args()
-pub = rospy.Publisher('cone_finder/locations', location_data, queue_size=10)
-colorPub = rospy.Publisher("cone_finder/colorImage", Image, queue_size=10)
-depthPub = rospy.Publisher("cone_finder/depthImage", Image, queue_size=10)
-colorCIPub = rospy.Publisher("cone_finder/colorCamInfo", CameraInfo, queue_size=2)
-depthCIPub = rospy.Publisher("cone_finder/depthCamInfo", CameraInfo, queue_size=2)
+pub = rospy.Publisher('locations', location_data, queue_size=10)
 
 def is_cv2():
     # if we are using OpenCV 2, then our cv2.__version__ will start
@@ -94,10 +85,12 @@ def convexHullIsPointingUp(hull):
     # if we get here, shape has passed pointing up check
     return True
 
-def find_cones(img, depthImg=None):
+def find_cones(img):
     h, w = img.shape[:2]
     image_centerX = w/2
     image_centerY = h  # y goes down from top
+    msg_str = "Image size = %d, %d" % (w, h);
+    rospy.loginfo(msg_str)
 
     # convert to HSV color space, this will produce better color filtering
     imgHSV = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
@@ -142,43 +135,25 @@ def find_cones(img, depthImg=None):
 
     listOfCones = []
     pose = Pose2D()
-    poses = []
     loc = location_data()
     loc.distance_is_real = False
-    dh, dw = h, w
-    if depthImg is not None:
-        loc.distance_is_real = True
-        dh, dw = depthImg.shape
-        #msg_str = "Image (%d, %d), Depth (%d, %d)" % (w, h, dw, dh);
-        #rospy.loginfo(msg_str)
-
     for contour in listOfContours:
-        hull = cv2.convexHull(contour)
-        # print 'convexHull',len(temp)
-        if (len(hull) >= 3 and convexHullIsPointingUp(hull)):
-            listOfCones.append(hull)
-            x, y, w, h = cv2.boundingRect(hull)
-            pose.x = x + w/2 - image_centerX
-            # Height is being measured top of screen to down so we need to invert y
-            lowY = image_centerY - (y+h)
-            pose.y = 256*lowY
-            if depthImg is not None:
-                # Depth image is 16UC1
-                pose.y = depthImg[pose.x, lowY]
-                rospy.logdebug('%d ==> %d' % (256*lowY, pose.y))
-
-            # It should never happen that pose.y is 0 or negative
-            if (pose.y > 0):
-                pose.theta = round((pose.x * 1.0) / pose.y , 3)
-                poses.append(pose)
-
-    loc.poses = poses
-    loc.header.stamp = rospy.Time.now()
+            hull = cv2.convexHull(contour)
+            # print 'convexHull',len(temp)
+            if (len(hull) >= 3 and convexHullIsPointingUp(hull)):
+                listOfCones.append(hull)
+                x, y, w, h = cv2.boundingRect(hull)
+                pose.x = x + w/2 - image_centerX
+                # Height is being measured top of screen to down so we need to invert y
+                pose.y = image_centerY - (y+h)
+                # It should never happen that pose.y is 0 or negative
+                if (pose.y > 0):
+                    pose.theta = (pose.x * 1.0) / pose.y
+                    loc.poses.append(pose)
+           
     imghull = img.copy()
     cv2.drawContours(imghull, listOfCones, -1, (0, 255, 0), 3)
-    if(len(listOfCones)):
-        pub.publish(loc)
-
+    pub.publish(loc)
     return len(listOfCones), imghull
 
 def find_in_images(loc='../images'):
@@ -188,12 +163,12 @@ def find_in_images(loc='../images'):
     rate = rospy.Rate(1) # One image per second
     for file in files:
         if args.debug:
-            rospy.logdebug('Processing file %s' % file)
+            rospy.loginfo('Processing file %s' % file)
         count, imghull = find_cones(cv2.imread(file, -1))
         if args.debug:
             cv2.imshow('output', imghull)
             msg_str = 'Found %d Cones' % count
-            rospy.logdebug(msg_str)
+            rospy.loginfo(msg_str)
         rate.sleep()
 
 def find_in_video(fileName):
@@ -202,11 +177,11 @@ def find_in_video(fileName):
     else:
       cap = cv2.VideoCapture(fileName)
       if(cap.isOpened() == False):
-        rospy.logerr("Error: Could not open video file " + fileName + ". Using default device.")
+        rospy.loginfo("Error: Could not open video file " + fileName + ". Using default device.")
         cap = cv2.VideoCapture(0)
 
     if(cap.isOpened() == False):
-      rospy.logerr("Could not open default video device")
+      rospy.loginfo("Could not open default video device")
       return
 
     rate = rospy.Rate(10) # 10 frames per second
@@ -231,92 +206,19 @@ def find_in_video(fileName):
     cap.release()
     cv2.destroyAllWindows()
 
-class RosColorDepth:
-    def __init__(self):
-        self.node_name = "RosColorDepth"
-        self.bridge = CvBridge()
-        self.thread_lock = threading.Lock()
-        colorCamInfo = message_filters.Subscriber("/camera/color/camera_info", CameraInfo)
-        depthCamInfo = message_filters.Subscriber("/camera/depth/camera_info", CameraInfo)
-        ts = message_filters.TimeSynchronizer([colorCamInfo, depthCamInfo], 10)
-        ts.registerCallback(self.camInfoCallback)
-        colorImage = message_filters.Subscriber("/camera/color/image_raw", Image)
-        depthImage = message_filters.Subscriber("/camera/depth/image_raw", Image)
-        ts = message_filters.TimeSynchronizer([colorImage, depthImage], 10)
-        ts.registerCallback(self.imageCallback)
-        rospy.loginfo("[%s] Initialized." %(self.node_name))
-        rospy.spin()
-
-    def camInfoCallback(self, colorCamInfo, depthCamInfo):
-        self.colorCamInfo = colorCamInfo
-        self.depthCamInfo = depthCamInfo
-
-    def imageCallback(self, colorImage, depthImage):
-        thread = threading.Thread(target=self.processImage, args=(colorImage, depthImage))
-        thread.setDaemon(True)
-        thread.start()
-
-    def processImage(self, colorImage, depthImage):
-        if not self.thread_lock.acquire(False):
-            return
-
-        #print(colorImage.encoding, depthImage.encoding)
-        cvRGB = self.bridge.imgmsg_to_cv2(colorImage, "bgr8")
-        cvDepth = self.bridge.imgmsg_to_cv2(depthImage)
-
-        dh, dw = cvDepth.shape[:2]
-        ch, cw = cvRGB.shape[:2]
-        if (ch != dh) and (cw != dw): 
-            cvRGB = cv2.resize(cvRGB, (dw, dh))
-            #cvDepth = cv2.resize(cvDepth, (cw, ch), interpolation = cv2.INTER_LINEAR)
-
-        self.colorCamInfo.width = cw
-        self.colorCamInfo.height = ch
-        self.depthCamInfo.width = cw
-        self.depthCamInfo.height = ch
-
-        try:
-            count, imghull = find_cones(cvRGB, cvDepth)
-            ts = rospy.Time.now()
-            self.colorCamInfo.header.stamp = ts
-            self.depthCamInfo.header.stamp = ts
-            colorCIPub.publish(self.colorCamInfo)
-            depthCIPub.publish(self.depthCamInfo)
-            colorMsg = self.bridge.cv2_to_imgmsg(imghull, "bgr8")
-            colorMsg.header.stamp = ts
-            colorMsg.header.frame_id = colorImage.header.frame_id
-            colorPub.publish(colorMsg)
-            depthMsg = depthImage
-            depthMsg.header.stamp = ts
-            #depthMsg.header.frame_id = 'camera_link'
-            depthPub.publish(depthMsg)
-            if args.debug:
-                #cv2.imshow('output', imghull)
-                msg_str = 'Found %d Cones' % count
-                rospy.loginfo(msg_str)
-           
-        except CvBridgeError as e:
-            rospy.logerr(e)
-            
-        self.thread_lock.release()
-    
 def find_cones_main():
-    #print(args.debug, args.image_dir, args.video_file)
+    print(args.debug, args.image_dir, args.video_file)
     rospy.init_node('cone_finder')
-    if args.use_ros_topic:
-        r = RosColorDepth()
+    if args.image_dir:
+        args.debug = True
+        find_in_images(args.image_dir)
+        # No rospy.spin when working with image dir
     else:
-        if args.image_dir:
-            args.debug = True
-            find_in_images(args.image_dir)
-            # No rospy.spin when working with image dir
-        else:
-            find_in_video(args.video_file)
-            rospy.spin()
+        find_in_video(args.video_file)
+        rospy.spin()
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Find cones in video feed or images')
-    parser.add_argument('--use_ros_topic', '-r', action='store_true', help='Use ROS topic')
     parser.add_argument('--image_dir', '-i', help='Find cones in images under specified directory')
     parser.add_argument('--debug', '-d', action='store_true', help='Show debug messages')
     parser.add_argument('video_file', nargs='?', help='Find cones in specified video file, use default video device if not specified')

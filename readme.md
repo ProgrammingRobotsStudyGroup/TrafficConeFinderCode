@@ -5,7 +5,8 @@
 - Publish heading for the cones
 
 ## ROS
-- [ROS node which detect cones using camera video](ROS/readme.md)
+- [ROS node which detect cones using ROS realsense_camera node or camera video](ROS/readme.md)
 
 ## License
 - [Repository License](License.md)
+
