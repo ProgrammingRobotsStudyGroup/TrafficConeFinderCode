@@ -320,7 +320,7 @@ if __name__=="__main__":
     parser.add_argument('--image_dir', '-i', help='Find cones in images under specified directory')
     parser.add_argument('--debug', '-d', action='store_true', help='Show debug messages')
     parser.add_argument('video_file', nargs='?', help='Find cones in specified video file, use default video device if not specified')
-    parser.parse_args(None, args)
+    parser.parse_args(rospy.myargv(), args)
     try:
       find_cones_main()
 
