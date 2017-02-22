@@ -23,6 +23,7 @@ import threading
 class Args(object):
     use_ros_topic = False
     publish_images = False
+    area_threshold = 100
     debug = False
     fromMain = False
     image_dir = ''
@@ -88,7 +89,8 @@ def convexHullIsPointingUp(hull):
     #centerY = y + h / 2
     
     (centerX, centerY), (w, h), angle = cv2.minAreaRect(hull)
-    if(h == 0 or w == 0):
+    # Remove any cones with size less than certain threshold
+    if(h*w < args.area_threshold):
         return False
     
     # Our cones are tall, rather than high
@@ -216,7 +218,7 @@ def find_cones(img, depthImg=None):
             loc.distance_is_real = isReal
             # Divide depth by 256 since x isn't really in real units
             pose.y = depthRange[0]/256   # But this is the hypotenuse
-            #If there is no min depth, use it from pixels
+            #If there is no real depth, use it from pixels
             if(pose.y == 0):
                 # Height is being measured top of screen to down so we need to invert y
                 yDist = (image_centerY - (y+h))
@@ -392,6 +394,7 @@ if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Find cones in video feed or images')
     parser.add_argument('--use_ros_topic', '-r', action='store_true', help='Use ROS topic')
     parser.add_argument('--image_dir', '-i', help='Find cones in images under specified directory')
+    parser.add_argument('--area_threshold', '-a', type=int, help='Area threshold to use for cones')
     parser.add_argument('--debug', '-d', action='store_true', help='Show debug messages')
     parser.add_argument('--publish_images', '-p', action='store_true', help='Publish marked images')
     parser.add_argument('video_file', nargs='?', help='Find cones in specified video file, use default video device if not specified')
