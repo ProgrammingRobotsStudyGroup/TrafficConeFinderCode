@@ -14,8 +14,9 @@ cone_seeker: reading cone_finder location messages and
 
 #settings = termios.tcgetattr(sys.stdin)
 hard_limits = [1000, 1500, 2000]  # microseconds for servo signal
-steering_limits = [1000, 1500, 2000]  # middle is neutral
-throttle_limits = [1200, 1500, 1800]  # middle is neutral
+steering_limits = [1135, 1435, 1735]  # middle is neutral
+# throttle_limits = [1200, 1500, 1800]  # middle is neutral
+throttle_limits = [1650, 1650, 1800]  # fwd range only; for testing; middle is NOT neutral
  
 # We will get angle between +pi/2 to -pi/2 for steering
 # We will get 480 pixels range for throttle but should limit this
@@ -66,9 +67,9 @@ def seek_cone(loc):
 
 if __name__=="__main__":
     parser = argparse.ArgumentParser(description='Drive to cone found')
-    parser.add_argument('--throttle_factor', '-t', type=int, 
+    parser.add_argument('--throttle_factor', '-t', default=1.0, type=float, 
                          help='Throttle step size factor')    
-    parser.add_argument('--steering_factor', '-s', type=int,
+    parser.add_argument('--steering_factor', '-s', default=1.0, type=float,
                          help='Steering step size factor')
     parser.parse_args(rospy.myargv(sys.argv[1:]), args)
     try:
