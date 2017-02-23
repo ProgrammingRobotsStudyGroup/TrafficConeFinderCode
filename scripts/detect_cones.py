@@ -1,24 +1,16 @@
 #!/usr/bin/env python
 
 import numpy as np
-import cv2
-
-import os
-import argparse
-import glob
-import sys
-import time, math
-
-from operator import itemgetter, attrgetter
+import cv2, os, argparse, glob
+import time, math, sys
+import rospy, message_filters, threading
+#from operator import itemgetter, attrgetter
 
 # Needed for publishing the messages
-import rospy
-import message_filters
 from sensor_msgs.msg import Image, CompressedImage, CameraInfo
-from geometry_msgs.msg import Pose2D
+from geometry_msgs.msg import Point
 from cone_finder.msg import location_msgs as location_data
 from cv_bridge import CvBridge, CvBridgeError
-import threading
 
 class Args(object):
     use_ros_topic = False
@@ -203,7 +195,7 @@ def find_cones(img, depthImg=None):
     listOfCones = []
     listOfAreas = []
     listOfObstructions = []
-    pose = Pose2D()
+    pose = Point()
     poses = []
     loc = location_data()
 
@@ -215,22 +207,11 @@ def find_cones(img, depthImg=None):
             listOfCones.append(hull)
             x, y, w, h = cv2.boundingRect(hull)
             pose.x = x + w/2 - image_centerX
-            loc.distance_is_real = isReal
+            # Height is being measured top of screen to down so we need to invert y
+            pose.y = (image_centerY - (y+h))
             # Divide depth by 256 since x isn't really in real units
-            pose.y = depthRange[0]/256   # But this is the hypotenuse
-            #If there is no real depth, use it from pixels
-            if(pose.y == 0):
-                # Height is being measured top of screen to down so we need to invert y
-                yDist = (image_centerY - (y+h))
-                pose.y = math.sqrt(yDist*yDist + pose.x * pose.x)
-                rospy.logdebug('%d ==> %d' % (pose.y, depthRange[0]/256))
-
-            # It should never happen that pose.y is 0 or negative
-            if (pose.y > 0):
-                #TODO: Inflate the ratio though it doesn't matter what exact angle this is
-                pose.theta = math.asin(pose.x/pose.y)
-                #pose.theta = (pose.x * 45.0)/pose.y
-                poses.append(pose)
+            pose.z = depthRange[0]   # But this is the hypotenuse
+            poses.append(pose)
 
     loc.poses = poses
     loc.header.stamp = rospy.Time.now()
