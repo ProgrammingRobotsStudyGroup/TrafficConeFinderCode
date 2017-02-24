@@ -37,7 +37,8 @@ def seek_cone(loc):
     if(cone_loc.x < -20 or cone_loc.x > 20):
         # Sin(theta)
         z = math.sqrt(cone_loc.x*cone_loc.x + cone_loc.y*cone_loc.y)
-        steering = steering + args.steering_factor*500*cone_loc.x/z
+        #steering = steering + args.steering_factor*500*cone_loc.x/z
+        steering = steering + args.steering_factor*2*cone_loc.x
         
     # Slowest approach to cone
     throttle = throttle_limits[1] + 20
@@ -50,6 +51,9 @@ def seek_cone(loc):
         y = cone_loc.y - 40
         if(y > 0):
             throttle = throttle + args.throttle_factor*(y)
+
+    #-- test with fixed throttle to start
+    throttle = 1675
 
     # Everything must be bounded    
     if(steering > steering_limits[2]):
