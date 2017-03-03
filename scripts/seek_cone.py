@@ -81,6 +81,9 @@ if __name__=="__main__":
         rospy.init_node('cone_seeker', anonymous=True)
         rospy.Subscriber('/cone_finder/locations', Locations, seek_cone)
         rospy.loginfo('cone_seeker init.')
+        rc = OverrideRCIn()
+        rc.channels = [1435,0,1500,0,0,0,0,0]
+        pub.publish(rc)
         rospy.spin()
 
     except rospy.ROSInterruptException:
