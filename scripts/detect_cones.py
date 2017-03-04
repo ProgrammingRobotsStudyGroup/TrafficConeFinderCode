@@ -66,7 +66,6 @@ def check_opencv_version(major, lib=None):
 def initCapture(frame, outFile):
     (h, w) = frame.shape[:2]
     fourcc = cv2.VideoWriter_fourcc(*args.codec)
-    #fourcc = frame.get(cv2.CAP_PROP_FOURCC)
     capOut = cv2.VideoWriter(outFile, fourcc, 15.0, (w, h), True)
     if(capOut.isOpened() == False):
         capOut = None
@@ -78,13 +77,13 @@ def captureFrames(cvRGB, cvDepth):
     if(args.firstTime):    
         # Initialize capture devices
         args.rgbOut = initCapture(cvRGB, args.rgbOutFile)
-        #args.depthOut = initCapture(cvDepth, args.depthOutFile)
+        args.depthOut = initCapture(cvDepth, args.depthOutFile)
         args.firstTime = False
 
     if(args.rgbOut is not None and args.rgbOut.isOpened() and cvRGB is not None):
         args.rgbOut.write(cvRGB)
     if(args.depthOut is not None and args.depthOut.isOpened() and cvDepth is not None):
-        args.depthOut.write(cvDepth)
+        args.depthOut.write(cv2.cvtColor((cvDepth/256).astype('uint8'), cv2.COLOR_GRAY2BGR))
 
 #Returns depth range tuple (min, max, realDepth) - realDepth is a boolean
 def getHullDepth(hull, depthImg=None):
@@ -183,16 +182,11 @@ def find_cones(img, depthImg=None):
     
     image_centerX = w/2
     image_centerY = h  # y goes down from top
-    
-    #if(depthImg is not None):
-    #    B, G, R = cv2.split(img.copy())
-    #    A = (enhance_depth(depthImg)/256).astype('uint8')
-    #    imgNew = cv2.merge((B*A, G*A, R*A))
-    #    enhancedDepth = enhance_depth(depthImg)
         
+    captureFrames(img, depthImg)
     # Process orange color and convert to gray image
     imgThresh = process_orange_color(img)
-    captureFrames(imgThresh, None)
+    #captureFrames(imgThresh, depthImg)
             
     # clone/copy thresh image before smoothing
     imgThreshSmoothed = imgThresh.copy()
